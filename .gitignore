@@ -1,5 +1,6 @@
 *.swp
 .ipynb_checkpoints/
+__pycache__/
 582hw1.pdf*
 Testdata.mat
 *.asv
