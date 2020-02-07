@@ -62,8 +62,10 @@ def spectrogram(data, fs=1.0, window=None, nperseg=None, noverlap=None):
     chunked_data = get_windows(data, nperseg, noverlap)
     windowed_data = apply_window_function(chunked_data, window)
     
+    # Calculate the time and frequency vectors
     t = np.arange(nperseg/2, data.shape[-1] - nperseg/2+1, nperseg-noverlap)/float(fs)
     freqs = (np.arange(1, nperseg + 1, dtype=int) // 2) / float(nperseg*(1.0/fs))
+
     # the above produces 2 of every frequency but the 0 and max frequency, so take the uniques
     # Slicing proved annoying to get consistent. probably not the most performant but WHATEVAH
     freqs = np.unique(freqs)
