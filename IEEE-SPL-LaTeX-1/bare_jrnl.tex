@@ -1,0 +1,351 @@
+\documentclass[journal]{IEEEtran}
+
+\ifCLASSINFOpdf
+\else
+   \usepackage[dvips]{graphicx}
+\fi
+\usepackage{url}
+
+\hyphenation{op-tical net-works semi-conduc-tor}
+
+\usepackage{graphicx}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=cyan}
+
+% Macro to get code font
+\def\code#1{\texttt{#1}}
+
+
+\begin{document}
+
+\title{AMATH 582 Homework 2: G\'{a}bor Transforms and Music}
+
+\author{Eric A. Silk
+\thanks{Eric Silk is a Masters Student in Applied Mathematics at the University of Washington,
+		and a Research Engineer for Schweitzer Engineering Laboratories, Pullman, WA 99163 (email: esilk16@uw.edu, eric.silk@ericsilk.com)}
+}
+
+\markboth{Homework Submission for AMATH 582: Computational Methods for Data Analysis, February 2020}
+{Shell \MakeLowercase{\textit{et al.}}: Bare Demo of IEEEtran.cls for IEEE Journals}
+\maketitle
+
+\begin{abstract}
+This exercise served as an opportunity to explore the implementation of a Spectrogram, along with the various considerations that go into window selections and their respective parameters.
+In addition, this was then applied to music to reproduce a musical score of two pieces of music provided by Dr. Kutz.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Filter, Fourier, Gabor, STFT, Spectrogram, Window, Audio
+\end{IEEEkeywords}
+
+
+\IEEEpeerreviewmaketitle
+
+
+\section{Introduction}
+
+\IEEEPARstart{G}{\'{a}}bor transforms, or "short time Fourier transforms" (STFT's) are an incredibly common technique used in signal processing and analysis. Their primary advantage is that they trade some resolution
+within the frequency domain for improved resolution in the time domain, or "time localization." This is typically acceptable, allowing end-users to understand and visualize signals with frequency components that may
+start, stop, or modulate throughout the duration of the data.
+
+\section{Theoretical Background}
+
+
+\subsection{Fourier Transforms}
+The Fourier Transform has already been covered in greater depth in the first paper, but is reproduced here for reference (Equation \ref{fourier}). In short, it converts arbitrary functions into a series of
+sines and cosines, which can be used to extract information about periodic behaviors in the input function.
+
+\begin{equation}
+\label{fourier}
+\hat{f}(\omega)=\int_{-\infty}^{\infty}f(x)e^{-2 \pi jx \omega}dx
+\end{equation}
+
+\subsection{G\'{a}bor Transforms}
+The G\'{a}bor transform is defined in Dr. Kutz's book and is reproduced in (\ref{gabor}). The addition of the windowing function $g(\tau)$ is what provides for the time localization. By sliding this window across
+the data, sections of the signal are isolated, providing temporal localization.
+
+\begin{equation}
+\label{gabor}
+G[f](t,\omega)=\hat{f}_{g}(t,\omega)=\int_{-\infty}^{\infty}f(\tau)g(\tau-t)e^{-j\omega\tau}d\tau
+\end{equation}
+
+
+\subsection{Windowing Function}
+The selection of the windowing function provides several advantages, with several considerations. Firstly, it is what provides the temporal localization (as noted above). Secondly, if selected such that it goes towards
+zero at its edges, it can provide a reduction in spectral leakage and artifacts. These normally occur due to the assumption that the function is periodically repeated, which may result in sharp transitions. Sharp transitions
+in a signal correspond to higher frequency components when transformed to the Fourier domain.
+
+The considerations for window selection are beyond the scope of this paper, but can be surmised in three parameters:
+\begin{itemize}
+	\item Primary lobe width, or the selectivity of the transform
+	\item Initial side-lobe height
+	\item Side-lobe attenuation rate, or how quickly the leakage decays
+\end{itemize}
+
+More information can be found on the relevant \href{https://en.wikipedia.org/wiki/Window_function}{Wikipedia Page}.
+
+Several choices include the Shannon (\ref{shannon}), Gaussian (\ref{gauss}), Triangular (\ref{triangular}), and "Mexican Hat" (\ref{ricker}) window.
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{window_shannon.png}}
+	\caption{The Shannon, Boxcar, or Rectangular Window}
+	\label{shannon}
+\end{figure}
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{window_gauss.png}}
+	\caption{The Gaussian Window}
+	\label{gauss}
+\end{figure}
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{window_triangular.png}}
+	\caption{The Triangular Window}
+	\label{triangular}
+\end{figure}
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{window_ricker.png}}
+	\caption{The Ricker, or Mexican Hat Wavelet}
+	\label{ricker}
+\end{figure}
+
+
+\section{Algorithm Implementation and Development}
+
+\subsection{G\'{a}bor Transform/Spectrogram}
+In the discrete space, the G\'{a}bor transform involves three steps:
+\begin{enumerate}
+	\item Signal segmentation
+	\item Application of the windowing function
+	\item The discrete Fourier transform
+\end{enumerate}
+
+The first of these is achieved through stride manipulation. ``Stride" refers to the number of addresses to shift to increment by one element in an array. For instance, if the smallest representable type is 8 bits, and the
+data is stored as a 64 bit type, the stride of the array is $64/8=8$, or 8 bytes per stride. However, this can be intentionally set to a longer multiple of the native stride to step multiple elements at a time. NumPy provides
+a method for this, given a stride length and width, to return a ``view" into an array.
+
+Once a windowed view is constructed, each window can be iterated over (in a naive implementation) and multiplied element-wise with a windowing function of an equivalent size/shape. That is, if a window is
+$N$ samples long, the windowing function must also be $N$ samples long. If no windowing function is applied, this is equivalent to the application of a Shannon window.
+
+Windowing functions must always be bounded for this reason. Continuous functions are truncated; for instance, the Gaussian Window is defined as:
+\begin{equation}
+w[n]=exp(-\frac{1}{2}(\frac{n-N/2}{\sigma N/2})^2), 0 \leq n \leq N
+\end{equation}
+
+Each resulting windowed function can then have the DFT taken via the Fast Fourier Transform (FFT), and the results stored. In this case, the data was purely real, and thus the ``real" FFT (or RFFT) was used, automatically
+discarding the negative frequency components.
+
+In order to plot the resulting spectrogram, two other pieces of information are required: the time of each window, and the frequencies contained therein. See the \code{spectrogram()} method for details in \code{fft\_funcs.py} for details.
+
+\subsection{Filtering and Score Reproduction}
+Given a single sound source, such as one voice or one instrument, a spectrogram can be used as a method to produce a musical score of sorts,
+analogous to the way MIDI encodes musical information. In order to clean the data up, filtering must be used. Rather than rely on convolution in the Fourier domain (or a piecewise multiplication
+of the transformed signal and the transformed filter), a forward-backwards filter was used. These are typically computationally more robust, and the use of forward-backwards ensures linear phase
+(beneficial when dealing with audio signals). Knowing that a note is typically a fundamental combined with overtones, a bandpass filter was used to remove sub- and super-fundamental frequencies. The
+cutoff frequencies were determined via visual inspection and manually tuned.
+
+When the filtered signal is then converted to a spectrogram, the largest magnitude values in the spectrum can be taken as the pitch of the note during a given window.
+
+\section{Computational Results}
+
+Firstly, we can see the plot of the \code{handel.mat} file in \ref{handel}. Note that it appears highly dense and varied across the entirety of the time series. Interestingly,
+with a priori knowledge of the music, one can see how the envelope of the signal corresponds to the overall loudness and sustain of the singers.
+
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{handel.png}}
+	%\caption{The handel.mat timeseries}
+	\label{handel}
+\end{figure}
+
+\subsection{Varying Window Dimensions and Overlap}
+The Shannon window was selected for varying the window size and overlap as it is a ``trivial" window. As expected, small windows produce data that is poorly localized along the frequency
+axis, but highly localized along the time axis. Longer windows reverse this, producing highly localized data along the frequency axis and poorly localized temporal data.
+(\ref{shannon_64_8})(\ref{shannon_256_32})(\ref{shannon_1024_128})
+
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{shannon_64_8.png}}
+	\caption{}
+	\label{shannon_64_8}
+\end{figure}
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{shannon_256_32.png}}
+	\caption{}
+	\label{shannon_256_32}
+\end{figure}
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{shannon_1024_128.png}}
+	\caption{}
+	\label{shannon_1024_128}
+\end{figure}
+
+By varying the amount of overlap while holding the window the same, we can observe its effects. It is difficult to tell visually, but longer overlaps trade greater computational time for
+an increased "averaging" effect between windows, decreasing the effects of the windowing.(\ref{shannon0})(\ref{shannon32})(\ref{shannon128})
+
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{shannon_0.png}}
+	\caption{}
+	\label{shannon0}
+\end{figure}
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{shannon_32.png}}
+	\caption{}
+	\label{shannon32}
+\end{figure}
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{shannon_128.png}}
+	\caption{}
+	\label{shannon128}
+\end{figure}
+
+
+\subsection{Different Windowing Functions}
+Differing windowing functions given different behavior within the frequency domain as well. Certain functions are more selective in frequency at the expense of reduced SNR (signal-to-noise-ratio), others are the opposite.
+Examples explored include the triangular window (\ref{triangle_spectrum}), Gaussian window (\ref{gaussian_spectrum}), and Ricker or ``Mexican Hat" window (\ref{ricker_spectrum}).
+
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{triangular_512.png}}
+	\caption{}
+	\label{triangle_spectrum}
+\end{figure}
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{gaussian_512.png}}
+	\caption{}
+	\label{gaussian_spectrum}
+\end{figure}
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{ricker_512.png}}
+	\caption{}
+	\label{ricker_spectrum}
+\end{figure}
+
+\subsection{Score Reproduction}
+The time series of the piano(\ref{piano}) and recorder(\ref{recorder}) recordings are reproduced for visual inspection.
+Notably, the recorder is clearly louder (likely due to proximity to the microphone), and the envelope of each note
+indicates more sustain -- common for instruments with continuous excitation of the vibrating member of the instrument.
+This is in contrast to instruments where excitation may only occur once, such as the piano or a guitar, where the
+vibrating member is struck once and initial transient decays quickly.
+
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{piano.png}}
+	\caption{}
+	\label{piano}
+\end{figure}
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{recorder.png}}
+	\caption{}
+	\label{recorder}
+\end{figure}
+
+Taking the spectrogram, and normalizing the results to a log scale to emphasize the harmonic content, the
+spectral energy of the sound can be observed.
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{piano_spect.png}}
+	\caption{}
+	\label{piano_spect}
+\end{figure}
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{recorder_spect.png}}
+	\caption{}
+	\label{recorder_spect}
+\end{figure}
+
+Of particular note is the relatively strong harmonics of the recorder when compared to the piano. High levels of harmonics
+are typically associated with strong non-linearities in a system. The recorder also seems to exhibit predominantly
+odd harmonics, typical of a symmetric distortion. Both of these qualities are often described qualitatively as 
+"harsh" or "brash". For more examples, listen to any Metal record -- the distinctive timbre of the guitars is achieved
+through the intentional introduction of significant non-linearity in the signal path.
+
+Conversely, the piano appears to have a much more complex harmonic spectrum, owing likely to the presence of even
+harmonics.
+
+The sudden dropoff in spectral content above ~18kHz is likely due to an anti-aliasing filter on the recording device.
+
+Both signals were bandpass filtered with cutoffs appropriate to their respective pitches, and the resulting time series can be seen in \ref{piano_filt} and \ref{recorder_filt}.
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{piano_filt.png}}
+	\caption{}
+	\label{piano_filt}
+\end{figure}
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{recorder_filt.png}}
+	\caption{}
+	\label{recorder_filt}
+\end{figure}
+
+The resulting spectrograms (and an approximate musical score) are shown in \ref{piano_score} and \ref{recorder_score}.
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{piano_score.png}}
+	\caption{}
+	\label{piano_score}
+\end{figure}
+\begin{figure}
+	\centerline{\includegraphics[width=\columnwidth]{recorder_score.png}}
+	\caption{}
+	\label{recorder_score}
+\end{figure}
+ 
+
+\section{Summary and Conclusion}
+G\'{a}bor filtering proves to be a highly useful analytic technique when assessing and processing time series data.
+By allowing a trade-off between time and frequency localization, a compromise can be made to suit the data. In addition,
+with the addition of filtering, a rough pitch detection and score reproduction method can be implemented.
+
+\newpage
+\clearpage
+\newpage
+\section{Appendix A: Functions Used}
+\subsection{\code{numpy.lib.stride\_tricks.as\_strided()}}
+Given a dataset (1D, in this case), a stride length, and a window width,
+return a ``view" into the data. See \href{https://docs.scipy.org/doc/numpy/reference/generated/numpy.lib.stride_tricks.as_strided.html}{here}.
+
+\subsection{\code{numpy.arange()}}
+Generates a linearly spaced, half-open set of values in a vector. Allows specification of the start, stop, step size,
+and data type. See \href{https://docs.scipy.org/doc/numpy/reference/generated/numpy.arange.html}{here}.
+
+\subsection{\code{numpy.unique()}}
+Returns the unique elements of an array, sorted. Used to remove the duplicate values produced when calculating
+the frequencies in \code{spectrogram}. See \href{https://docs.scipy.org/doc/numpy/reference/generated/numpy.unique.html}{here}.
+
+\subsection{\code{numpy.apply\_along\_axis()}}
+Applies a function (provided as a function object) to an \code{ndarray} along a given axis. Used
+to calculate the \code{RFFT} of each window of the data. See \href{https://docs.scipy.org/doc/numpy/reference/generated/numpy.apply_along_axis.html}{here}.
+
+\subsection{\code{numpy.fft.rfft()}}
+Computes the 1D DFT on real input, returning only the positive frequencies. Conveniently handles the discarding
+of negative frequencies and removes the need for a post-FFT shifting function.
+See \href{https://docs.scipy.org/doc/numpy/reference/generated/numpy.fft.rfft.html}{here}.
+
+\subsection{\code{numpy.where()}}
+Returns the indices of values matching the logical condition passed as an argument. See
+\href{https://docs.scipy.org/doc/numpy/reference/generated/numpy.where.html}{here}.
+
+\subsection{\code{matplotlib.pyplot.pcolormesh}}
+Given a pair of axes and a ``mesh" of values for those two axes, produces a color coded plot indicating their magnitudes.
+See \href{https://matplotlib.org/api/_as_gen/matplotlib.pyplot.pcolormesh.html}{here}.
+
+\subsection{\code{matplotlib.colors.Normalize()}, \code{matplotlib.colors.LogNorm()}}
+For use in conjunction with a color plot, normalizes the colors to extend from the desired minimum
+and maximum values (typically the minimum and maximum of the data). LogNorm does the same, but on a
+logarithmic basis, useful for showing small differences. See \href{https://matplotlib.org/tutorials/colors/colormapnorms.html}{here}.
+
+\subsection{Windowing Functions}
+SciPy provides easy methods for generating windowing functions, including \href{https://docs.scipy.org/doc/scipy-1.0.0/reference/generated/scipy.signal.gaussian.html}{Gaussian},
+\href{https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.ricker.html}{Ricker}, and
+\href{https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.triang.html}{Triangular}.
+
+
+\newpage
+\clearpage
+\newpage
+\section{Appendix B: Python Code}
+See my \href{https://github.com/eric-silk/AMATH582_HW2}{Github} for the full repository, including this source code for this IEEE template \LaTeX document. Code is also attached at the end of this report.
+
+\section{Appendix C: Other Things}
+As a fun aside, the composer for 2016 reboot of ``Doom", Mick Gordon, gave an excellent talk on the techniques
+and values drawn upon during his writing and recording process. It can be viewed \href{https://youtu.be/U4FNBMZsqrY}{here}
+(approx. 1hr). In it he discusses an Easter Egg he embedded within the music -- in particular, a manipulation of the
+spectrogram, producing the spectrogram in \ref{doom} (demonstrated around the 39 minute mark). Neat!
+\begin{figure}[h!]
+	\centerline{\includegraphics[width=\columnwidth]{doom.jpg}}
+	\caption{Satanic Spectrograms in Doom}
+	\label{doom}
+\end{figure}
+
+\end{document}
